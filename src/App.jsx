@@ -41,27 +41,22 @@ function App() {
       const fee = await contract.signupFee();
       setSignupFee(ethers.formatUnits(fee, 18));
 
-      // 🔥 Robust handling to fetch expiry timestamp from contract
+      // 🔥 Fetching exact user expiry timestamp from contract mapping
       try {
-        let expiryTimestamp = 0;
-        if (typeof contract.users === 'function') {
-          const userInfo = await contract.users(userAddress);
-          expiryTimestamp = Number(userInfo.expiry || userInfo[2] || 0);
-        } else if (typeof contract.getUserExpiry === 'function') {
-          expiryTimestamp = Number(await contract.getUserExpiry(userAddress));
-        } else if (data.expiry) {
-          expiryTimestamp = Number(data.expiry);
-        }
+        const userInfo = await contract.users(userAddress);
+        // userInfo[2] ya userInfo.expiry mein expiry timestamp hota hai (in seconds)
+        const expiryTimestamp = Number(userInfo.expiry || userInfo[2] || 0);
 
         if (expiryTimestamp > 0) {
           const remaining = (expiryTimestamp * 1000) - Date.now();
           setTimeLeft(remaining > 0 ? remaining : 0);
+          if (remaining <= 0) setIsRegistered(false);
         } else {
-          // Fallback demo timer if contract returns 0 (e.g., 7 days from now for testing layout)
-          setTimeLeft(7 * 24 * 3600 * 1000);
+          setTimeLeft(0);
         }
       } catch (err) {
-        setTimeLeft(7 * 24 * 3600 * 1000);
+        console.error("Error fetching expiry:", err);
+        setTimeLeft(0);
       }
 
     } catch (e) { console.error(e); }
@@ -69,11 +64,7 @@ function App() {
 
   // 🔥 Live Countdown Timer Effect & Auto Redirect on Expiry
   useEffect(() => {
-    if (timeLeft === null) return;
-    if (timeLeft <= 0) {
-      setIsRegistered(false);
-      return;
-    }
+    if (timeLeft === null || timeLeft <= 0) return;
     const timer = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1000) {
@@ -88,6 +79,7 @@ function App() {
   }, [timeLeft]);
 
   const formatTime = (ms) => {
+    if (ms <= 0) return "Expired";
     const totalSeconds = Math.floor(ms / 1000);
     const days = Math.floor(totalSeconds / (3600 * 24));
     const hours = Math.floor((totalSeconds % (3600 * 24)) / 3600);
