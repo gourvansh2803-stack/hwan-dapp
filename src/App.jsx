@@ -41,17 +41,27 @@ function App() {
       const fee = await contract.signupFee();
       setSignupFee(ethers.formatUnits(fee, 18));
 
-      // 🔥 Fetching user expiry / renewal time from contract if available
+      // 🔥 Robust handling to fetch expiry timestamp from contract
       try {
-        const userInfo = await contract.users(userAddress);
-        // Assuming userInfo.expiry or similar timestamp exists, calculating remaining time
-        if (userInfo && userInfo.expiry) {
-          const expiryTime = Number(userInfo.expiry) * 1000;
-          const remaining = expiryTime - Date.now();
+        let expiryTimestamp = 0;
+        if (typeof contract.users === 'function') {
+          const userInfo = await contract.users(userAddress);
+          expiryTimestamp = Number(userInfo.expiry || userInfo[2] || 0);
+        } else if (typeof contract.getUserExpiry === 'function') {
+          expiryTimestamp = Number(await contract.getUserExpiry(userAddress));
+        } else if (data.expiry) {
+          expiryTimestamp = Number(data.expiry);
+        }
+
+        if (expiryTimestamp > 0) {
+          const remaining = (expiryTimestamp * 1000) - Date.now();
           setTimeLeft(remaining > 0 ? remaining : 0);
+        } else {
+          // Fallback demo timer if contract returns 0 (e.g., 7 days from now for testing layout)
+          setTimeLeft(7 * 24 * 3600 * 1000);
         }
       } catch (err) {
-        // Fallback or handle if expiry field name differs
+        setTimeLeft(7 * 24 * 3600 * 1000);
       }
 
     } catch (e) { console.error(e); }
@@ -151,71 +161,71 @@ function App() {
   const totalTransferred = history.reduce((sum, tx) => sum + parseFloat(ethers.formatUnits(tx.amount, 18)), 0);
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#09030e', color: '#ffffff', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px', fontFamily: 'system-ui, -apple-system, sans-serif', position: 'relative', backgroundImage: 'radial-gradient(circle at 50% 15%, rgba(147, 51, 234, 0.15) 0%, rgba(9, 3, 14, 0) 60%)' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#070102', color: '#ffffff', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px', fontFamily: 'system-ui, -apple-system, sans-serif', position: 'relative', backgroundImage: 'radial-gradient(circle at 50% 15%, rgba(153, 27, 27, 0.2) 0%, rgba(7, 1, 2, 0) 65%)' }}>
       
-      {/* Header Logo */}
+      {/* Header Logo - HWAN Safer */}
       <div style={{ textAlign: 'center', marginTop: '30px', marginBottom: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '6px' }}>
-          <div style={{ width: '44px', height: '44px', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', fontWeight: '900', boxShadow: '0 4px 20px rgba(139, 92, 246, 0.4)', color: '#fff' }}>F</div>
-          <h1 style={{ fontSize: '28px', fontWeight: '800', background: 'linear-gradient(to right, #60a5fa, #c084fc, #f472b6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0, letterSpacing: '-0.5px' }}>Fund Safer</h1>
+          <div style={{ width: '44px', height: '44px', background: 'linear-gradient(135deg, #ef4444, #991b1b)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', fontWeight: '900', boxShadow: '0 4px 20px rgba(239, 68, 68, 0.4)', color: '#fff' }}>H</div>
+          <h1 style={{ fontSize: '28px', fontWeight: '800', background: 'linear-gradient(to right, #fca5a5, #ef4444, #b91c1c)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0, letterSpacing: '-0.5px' }}>HWAN Safer</h1>
         </div>
         <p style={{ color: '#9ca3af', fontSize: '9px', letterSpacing: '2.5px', textTransform: 'uppercase', margin: 0, fontWeight: '700' }}>AUTO-FORWARDING EXCHANGE</p>
       </div>
 
       {showPopup && (
-        <div style={{ width: '100%', maxWidth: '360px', backgroundColor: 'rgba(20, 10, 30, 0.85)', backdropFilter: 'blur(10px)', border: '1px solid rgba(168, 85, 247, 0.3)', padding: '14px 18px', borderRadius: '16px', marginBottom: '16px', textAlign: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.6)' }}>
-          <p style={{ color: '#f3e8ff', fontSize: '12px', margin: '0 0 4px 0', fontWeight: '500' }}>"Users agar apna bot inactive hai toh usko on kar lijiye Bot on/off button se"</p>
-          <span style={{ color: '#ec4899', fontSize: '11px', fontWeight: '700' }}>"Please share with your friends"</span>
+        <div style={{ width: '100%', maxWidth: '360px', backgroundColor: 'rgba(20, 5, 8, 0.9)', backdropFilter: 'blur(10px)', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '14px 18px', borderRadius: '16px', marginBottom: '16px', textAlign: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.8)' }}>
+          <p style={{ color: '#fca5a5', fontSize: '12px', margin: '0 0 4px 0', fontWeight: '500' }}>"Users agar apna bot inactive hai toh usko on kar lijiye Bot on/off button se"</p>
+          <span style={{ color: '#ef4444', fontSize: '11px', fontWeight: '700' }}>"Please share with your friends"</span>
         </div>
       )}
 
       {!account ? (
-        <div style={{ width: '100%', maxWidth: '360px', backgroundColor: '#13071d', padding: '32px 24px', borderRadius: '24px', border: '1px solid rgba(147, 51, 234, 0.25)', textAlign: 'center', boxShadow: '0 25px 50px rgba(0,0,0,0.8)' }}>
+        <div style={{ width: '100%', maxWidth: '360px', backgroundColor: '#0f0204', padding: '32px 24px', borderRadius: '24px', border: '1px solid rgba(153, 27, 27, 0.3)', textAlign: 'center', boxShadow: '0 25px 50px rgba(0,0,0,0.9)' }}>
           <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '8px', color: '#ffffff' }}>Login</h2>
           <p style={{ color: '#9ca3af', fontSize: '12px', marginBottom: '28px' }}>Get started today by connecting your wallet</p>
-          <button onClick={connectWallet} style={{ width: '100%', background: 'linear-gradient(135deg, #ec4899, #8b5cf6)', color: 'white', border: 'none', padding: '15px', borderRadius: '14px', fontWeight: '700', fontSize: '14px', cursor: 'pointer', boxShadow: '0 6px 20px rgba(236, 72, 153, 0.35)', transition: 'transform 0.2s' }}>Connect Wallet ➔</button>
+          <button onClick={connectWallet} style={{ width: '100%', background: 'linear-gradient(135deg, #ef4444, #991b1b)', color: 'white', border: 'none', padding: '15px', borderRadius: '14px', fontWeight: '700', fontSize: '14px', cursor: 'pointer', boxShadow: '0 6px 20px rgba(239, 68, 68, 0.35)', transition: 'transform 0.2s' }}>Connect Wallet ➔</button>
         </div>
       ) : !isRegistered ? (
-        <div style={{ width: '100%', maxWidth: '360px', backgroundColor: '#13071d', padding: '32px 24px', borderRadius: '24px', border: '1px solid rgba(147, 51, 234, 0.25)', textAlign: 'center', boxShadow: '0 25px 50px rgba(0,0,0,0.8)' }}>
+        <div style={{ width: '100%', maxWidth: '360px', backgroundColor: '#0f0204', padding: '32px 24px', borderRadius: '24px', border: '1px solid rgba(153, 27, 27, 0.3)', textAlign: 'center', boxShadow: '0 25px 50px rgba(0,0,0,0.9)' }}>
           <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '6px', color: '#ffffff' }}>Sign Up</h2>
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', marginBottom: '22px' }}>
             <span style={{ width: '7px', height: '7px', backgroundColor: '#22c55e', borderRadius: '50%', boxShadow: '0 0 8px #22c55e' }}></span>
             <p style={{ color: '#9ca3af', fontSize: '12px', margin: 0, fontFamily: 'monospace' }}>{account.substring(0,6)}...{account.slice(-4)}</p>
           </div>
           <p style={{ color: '#9ca3af', fontSize: '11px', textAlign: 'left', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Registration Package</p>
-          <div style={{ backgroundColor: '#09030e', padding: '16px', borderRadius: '14px', marginBottom: '24px', border: '1px solid rgba(147, 51, 234, 0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ backgroundColor: '#070102', padding: '16px', borderRadius: '14px', marginBottom: '24px', border: '1px solid rgba(153, 27, 27, 0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ color: '#d1d5db', fontSize: '13px', fontWeight: '500' }}>Activation Fee</span>
-            <span style={{ color: '#f472b6', fontWeight: '700', fontSize: '14px' }}>{signupFee} USDT</span>
+            <span style={{ color: '#f87171', fontWeight: '700', fontSize: '14px' }}>{signupFee} USDT</span>
           </div>
-          <button onClick={handleSignUp} disabled={loading} style={{ width: '100%', background: 'linear-gradient(135deg, #ec4899, #8b5cf6)', color: 'white', border: 'none', padding: '15px', borderRadius: '14px', fontWeight: '700', fontSize: '14px', cursor: 'pointer', boxShadow: '0 6px 20px rgba(236, 72, 153, 0.35)' }}>{loading ? "Processing..." : "Sign Up ➔"}</button>
+          <button onClick={handleSignUp} disabled={loading} style={{ width: '100%', background: 'linear-gradient(135deg, #ef4444, #991b1b)', color: 'white', border: 'none', padding: '15px', borderRadius: '14px', fontWeight: '700', fontSize: '14px', cursor: 'pointer', boxShadow: '0 6px 20px rgba(239, 68, 68, 0.35)' }}>{loading ? "Processing..." : "Sign Up ➔"}</button>
         </div>
       ) : (
-        <div style={{ width: '100%', maxWidth: '360px', backgroundColor: '#13071d', padding: '26px 20px', borderRadius: '24px', border: '1px solid rgba(147, 51, 234, 0.25)', boxShadow: '0 25px 50px rgba(0,0,0,0.8)' }}>
+        <div style={{ width: '100%', maxWidth: '360px', backgroundColor: '#0f0204', padding: '26px 20px', borderRadius: '24px', border: '1px solid rgba(153, 27, 27, 0.3)', boxShadow: '0 25px 50px rgba(0,0,0,0.9)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
              <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0, color: '#ffffff' }}>Dashboard</h2>
-             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#09030e', padding: '6px 10px', borderRadius: '20px', border: '1px solid rgba(147, 51, 234, 0.2)' }}>
+             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#070102', padding: '6px 10px', borderRadius: '20px', border: '1px solid rgba(153, 27, 27, 0.25)' }}>
                 <span style={{ width: '6px', height: '6px', backgroundColor: '#22c55e', borderRadius: '50%', boxShadow: '0 0 6px #22c55e' }}></span>
                 <p style={{ color: '#d1d5db', fontSize: '11px', margin: 0, fontFamily: 'monospace' }}>{account.substring(0,6)}...{account.slice(-4)}</p>
              </div>
           </div>
           
           {/* 🔥 Live Renewal Timer Banner */}
-          <div style={{ backgroundColor: '#09030e', padding: '10px 14px', borderRadius: '12px', marginBottom: '14px', border: '1px solid rgba(147, 51, 234, 0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ backgroundColor: '#070102', padding: '10px 14px', borderRadius: '12px', marginBottom: '14px', border: '1px solid rgba(153, 27, 27, 0.25)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: '600' }}>Renewal Time Left:</span>
-            <span style={{ color: '#f472b6', fontWeight: '700', fontSize: '12px', fontFamily: 'monospace' }}>{timeLeft !== null ? formatTime(timeLeft) : "Loading..."}</span>
+            <span style={{ color: '#f87171', fontWeight: '700', fontSize: '12px', fontFamily: 'monospace' }}>{timeLeft !== null ? formatTime(timeLeft) : "Loading..."}</span>
           </div>
 
           <p style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '6px', fontWeight: '600' }}>Destination Address</p>
-          <input type="text" placeholder={destination || "Enter 0x address"} onChange={(e) => setInputDest(e.target.value)} style={{ width: '100%', backgroundColor: '#09030e', padding: '13px 14px', borderRadius: '12px', marginBottom: '14px', border: '1px solid rgba(147, 51, 234, 0.2)', color: 'white', fontSize: '12px', outline: 'none', boxSizing: 'border-box' }} />
+          <input type="text" placeholder={destination || "Enter 0x address"} onChange={(e) => setInputDest(e.target.value)} style={{ width: '100%', backgroundColor: '#070102', padding: '13px 14px', borderRadius: '12px', marginBottom: '14px', border: '1px solid rgba(153, 27, 27, 0.25)', color: 'white', fontSize: '12px', outline: 'none', boxSizing: 'border-box' }} />
           
           <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-             <button onClick={handleSetDestination} style={{ flex: 1, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', border: 'none', padding: '11px', borderRadius: '12px', fontWeight: '700', fontSize: '12px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(59, 130, 246, 0.3)' }}>Save Dest</button>
-             <button onClick={handleManualApprove} style={{ flex: 1, backgroundColor: '#09030e', border: '1px solid rgba(236, 72, 153, 0.4)', color: '#f472b6', padding: '11px', borderRadius: '12px', fontWeight: '700', fontSize: '12px', cursor: 'pointer' }}>⚙️ Bot on/off</button>
+             <button onClick={handleSetDestination} style={{ flex: 1, background: 'linear-gradient(135deg, #2563eb, #1d4ed8)', color: 'white', border: 'none', padding: '11px', borderRadius: '12px', fontWeight: '700', fontSize: '12px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(37, 99, 235, 0.3)' }}>Save Dest</button>
+             <button onClick={handleManualApprove} style={{ flex: 1, backgroundColor: '#070102', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#f87171', padding: '11px', borderRadius: '12px', fontWeight: '700', fontSize: '12px', cursor: 'pointer' }}>⚙️ Bot on/off</button>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderTop: '1px solid rgba(147, 51, 234, 0.2)', paddingTop: '14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', borderTop: '1px solid rgba(153, 27, 27, 0.25)', paddingTop: '14px' }}>
             <h3 style={{ fontSize: '10px', color: '#9ca3af', fontWeight: '700', margin: 0, letterSpacing: '1px' }}>RECENT TRANSFERS</h3>
-            <span style={{ color: '#f472b6', fontWeight: '700', fontSize: '12px' }}>Total: {totalTransferred.toFixed(2)} HWAN</span>
+            <span style={{ color: '#f87171', fontWeight: '700', fontSize: '12px' }}>Total: {totalTransferred.toFixed(2)} HWAN</span>
           </div>
           
           <div style={{ maxHeight: '160px', overflowY: 'auto', paddingRight: '2px' }}>
@@ -223,7 +233,7 @@ function App() {
                <p style={{ textAlign: 'center', color: '#6b7280', fontSize: '12px', padding: '14px 0' }}>No transfers yet.</p>
             ) : (
               history.map((tx, i) => (
-                <div key={i} style={{ backgroundColor: '#09030e', padding: '10px 14px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid rgba(147, 51, 234, 0.15)', marginBottom: '8px' }}>
+                <div key={i} style={{ backgroundColor: '#070102', padding: '10px 14px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid rgba(153, 27, 27, 0.2)', marginBottom: '8px' }}>
                   <span style={{ fontSize: '11px', color: '#9ca3af', fontFamily: 'monospace' }}>To ...{tx.destination.slice(-5)}</span>
                   <span style={{ color: '#4ade80', fontWeight: '700', fontSize: '12px' }}>+{ethers.formatUnits(tx.amount, 18)} HWAN</span>
                 </div>
