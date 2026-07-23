@@ -41,11 +41,11 @@ function App() {
       const fee = await contract.signupFee();
       setSignupFee(ethers.formatUnits(fee, 18));
 
-      // 🔥 Smart contract ke struct ke mutabik lastSignupTime aur renewalInterval fetch karna
+      // 🔥 Smart contract ke exact struct index [3] (lastSignupTime) se time fetch karna
       try {
         const userInfo = await contract.users(userAddress);
         const lastSignupTime = Number(userInfo.lastSignupTime || userInfo[3] || 0);
-        const renewalInterval = Number(await contract.renewalInterval() || 2592000); // default 30 days agar kuch na mile
+        const renewalInterval = Number(await contract.renewalInterval() || 2592000); 
         const renewalEnabled = await contract.renewalEnabled();
 
         if (renewalEnabled && lastSignupTime > 0) {
@@ -54,12 +54,12 @@ function App() {
           setTimeLeft(remaining > 0 ? remaining : 0);
           if (remaining <= 0) setIsRegistered(false);
         } else {
-          // Agar renewal disable hai ya naya user hai toh lamba time ya infinite dikha sakte hain, yahan 7 days ya max time set kar diya hai taaki expired na dikhe
-          setTimeLeft(7 * 24 * 3600 * 1000);
+          // Agar renewal disabled hai ya contract se time nahi mila, tabhi 0 ya proper state rakhein
+          setTimeLeft(0);
         }
       } catch (err) {
         console.error("Error fetching expiry:", err);
-        setTimeLeft(7 * 24 * 3600 * 1000);
+        setTimeLeft(0);
       }
 
     } catch (e) { console.error(e); }
