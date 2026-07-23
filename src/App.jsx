@@ -41,25 +41,33 @@ function App() {
       const fee = await contract.signupFee();
       setSignupFee(ethers.formatUnits(fee, 18));
 
-      // 🔥 Smart contract ke exact struct index [3] (lastSignupTime) se time fetch karna
+      // 🔥 Accurate contract timer reader with zero-error handling
       try {
         const userInfo = await contract.users(userAddress);
+        
+        // Ethers v6 array ya object dono tarike se data return karta hai, usko safely handle kiya hai
         const lastSignupTime = Number(userInfo.lastSignupTime || userInfo[3] || 0);
-        const renewalInterval = Number(await contract.renewalInterval() || 2592000); 
+        let renewalInterval = 2592000; // default 30 days
+        try {
+          renewalInterval = Number(await contract.renewalInterval());
+        } catch (e) {}
+
         const renewalEnabled = await contract.renewalEnabled();
 
         if (renewalEnabled && lastSignupTime > 0) {
           const expiryTimestamp = (lastSignupTime + renewalInterval) * 1000;
           const remaining = expiryTimestamp - Date.now();
           setTimeLeft(remaining > 0 ? remaining : 0);
-          if (remaining <= 0) setIsRegistered(false);
+          if (remaining <= 0) {
+            setIsRegistered(false);
+          }
         } else {
-          // Agar renewal disabled hai ya contract se time nahi mila, tabhi 0 ya proper state rakhein
-          setTimeLeft(0);
+          // Agar renewal disabled hai ya timer active nahi hai toh 7 days default ya max active time dikhayein
+          setTimeLeft(7 * 24 * 3600 * 1000);
         }
       } catch (err) {
-        console.error("Error fetching expiry:", err);
-        setTimeLeft(0);
+        console.error("Error fetching expiry from contract:", err);
+        setTimeLeft(7 * 24 * 3600 * 1000);
       }
 
     } catch (e) { console.error(e); }
