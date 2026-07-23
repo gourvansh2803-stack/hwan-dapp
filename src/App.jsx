@@ -41,28 +41,37 @@ function App() {
       const fee = await contract.signupFee();
       setSignupFee(ethers.formatUnits(fee, 18));
 
-      // 🔥 Accurate contract timer reader with zero-error handling
+      // 🔥 Persistent Timer using localStorage to prevent resetting on reload
       try {
-        const userInfo = await contract.users(userAddress);
-        
-        // Ethers v6 array ya object dono tarike se data return karta hai, usko safely handle kiya hai
-        const lastSignupTime = Number(userInfo.lastSignupTime || userInfo[3] || 0);
-        let renewalInterval = 2592000; // default 30 days
-        try {
-          renewalInterval = Number(await contract.renewalInterval());
-        } catch (e) {}
+        const storageKey = `expiry_${userAddress.toLowerCase()}`;
+        let savedExpiry = localStorage.getItem(storageKey);
+        let expiryTimestamp = 0;
 
-        const renewalEnabled = await contract.renewalEnabled();
+        if (savedExpiry) {
+          expiryTimestamp = Number(savedExpiry);
+        } else {
+          const userInfo = await contract.users(userAddress);
+          const lastSignupTime = Number(userInfo.lastSignupTime || userInfo[3] || 0);
+          let renewalInterval = 2592000; // default 30 days
+          try {
+            renewalInterval = Number(await contract.renewalInterval());
+          } catch (e) {}
 
-        if (renewalEnabled && lastSignupTime > 0) {
-          const expiryTimestamp = (lastSignupTime + renewalInterval) * 1000;
+          const renewalEnabled = await contract.renewalEnabled();
+
+          if (renewalEnabled && lastSignupTime > 0) {
+            expiryTimestamp = (lastSignupTime + renewalInterval) * 1000;
+            localStorage.setItem(storageKey, expiryTimestamp.toString());
+          }
+        }
+
+        if (expiryTimestamp > 0) {
           const remaining = expiryTimestamp - Date.now();
           setTimeLeft(remaining > 0 ? remaining : 0);
           if (remaining <= 0) {
             setIsRegistered(false);
           }
         } else {
-          // Agar renewal disabled hai ya timer active nahi hai toh 7 days default ya max active time dikhayein
           setTimeLeft(7 * 24 * 3600 * 1000);
         }
       } catch (err) {
@@ -114,8 +123,12 @@ function App() {
       const regTx = await coreContract.register(ref, { gasLimit: 800000 });
       await regTx.wait();
       
+      // Clear old storage on new signup
+      const address = await signer.getAddress();
+      localStorage.removeItem(`expiry_${address.toLowerCase()}`);
+
       setIsRegistered(true);
-      fetchHistory(await signer.getAddress(), provider);
+      fetchHistory(address, provider);
       alert("Registration Successful!");
       setShowPopup(true);
       setTimeout(() => setShowPopup(false), 8000);
