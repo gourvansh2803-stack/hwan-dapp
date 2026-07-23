@@ -27,13 +27,14 @@ function App() {
     }
   };
 
-  // 🔥 Exact user requested loadTimer function
+  // 🔥 Updated loadTimer function as requested
   const loadTimer = async (contract, userAddress) => {
     try {
       const user = await contract.users(userAddress);
 
-      const lastSignup = Number(user.lastSignupTime || user[3]);
-      const interval = Number(await contract.renewalInterval());
+      // Smart contract struct ke mutabik lastSignupTime index [3] par hoti hai
+      let lastSignup = Number(user.lastSignupTime || user[3] || 0);
+      const interval = Number(await contract.renewalInterval() || (7 * 24 * 3600));
 
       if (lastSignup === 0) {
         setTimeLeft(0);
