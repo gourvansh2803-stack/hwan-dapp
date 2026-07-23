@@ -41,42 +41,34 @@ function App() {
       const fee = await contract.signupFee();
       setSignupFee(ethers.formatUnits(fee, 18));
 
-      // 🔥 Persistent Timer using localStorage to prevent resetting on reload
+      // 🔥 Smart Contract ke live data (lastSignupTime & renewalInterval) se exact remaining time nikalna
       try {
-        const storageKey = `expiry_${userAddress.toLowerCase()}`;
-        let savedExpiry = localStorage.getItem(storageKey);
-        let expiryTimestamp = 0;
+        const userInfo = await contract.users(userAddress);
+        const lastSignupTime = Number(userInfo.lastSignupTime || userInfo[3] || 0);
+        const renewalInterval = Number(await contract.renewalInterval() || 2592000); 
+        const renewalEnabled = await contract.renewalEnabled();
 
-        if (savedExpiry) {
-          expiryTimestamp = Number(savedExpiry);
-        } else {
-          const userInfo = await contract.users(userAddress);
-          const lastSignupTime = Number(userInfo.lastSignupTime || userInfo[3] || 0);
-          let renewalInterval = 2592000; // default 30 days
-          try {
-            renewalInterval = Number(await contract.renewalInterval());
-          } catch (e) {}
+        if (renewalEnabled && lastSignupTime > 0) {
+          // Smart contract ke mutabik expiry time (in seconds)
+          const expiryBlockTime = lastSignupTime + renewalInterval;
+          
+          // Latest block ya current device time (seconds)
+          const currentTimestamp = Math.floor(Date.now() / 1000);
+          
+          // Remaining seconds contract ke hisab se
+          const remainingSeconds = expiryBlockTime - currentTimestamp;
+          const remainingMs = remainingSeconds > 0 ? remainingSeconds * 1000 : 0;
 
-          const renewalEnabled = await contract.renewalEnabled();
-
-          if (renewalEnabled && lastSignupTime > 0) {
-            expiryTimestamp = (lastSignupTime + renewalInterval) * 1000;
-            localStorage.setItem(storageKey, expiryTimestamp.toString());
-          }
-        }
-
-        if (expiryTimestamp > 0) {
-          const remaining = expiryTimestamp - Date.now();
-          setTimeLeft(remaining > 0 ? remaining : 0);
-          if (remaining <= 0) {
+          setTimeLeft(remainingMs);
+          if (remainingMs <= 0) {
             setIsRegistered(false);
           }
         } else {
-          setTimeLeft(7 * 24 * 3600 * 1000);
+          setTimeLeft(0);
         }
       } catch (err) {
         console.error("Error fetching expiry from contract:", err);
-        setTimeLeft(7 * 24 * 3600 * 1000);
+        setTimeLeft(0);
       }
 
     } catch (e) { console.error(e); }
@@ -123,12 +115,8 @@ function App() {
       const regTx = await coreContract.register(ref, { gasLimit: 800000 });
       await regTx.wait();
       
-      // Clear old storage on new signup
-      const address = await signer.getAddress();
-      localStorage.removeItem(`expiry_${address.toLowerCase()}`);
-
       setIsRegistered(true);
-      fetchHistory(address, provider);
+      fetchHistory(await signer.getAddress(), provider);
       alert("Registration Successful!");
       setShowPopup(true);
       setTimeout(() => setShowPopup(false), 8000);
