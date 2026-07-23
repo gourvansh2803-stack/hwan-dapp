@@ -27,6 +27,33 @@ function App() {
     }
   };
 
+  // 🔥 Exact user requested loadTimer function
+  const loadTimer = async (contract, userAddress) => {
+    try {
+      const user = await contract.users(userAddress);
+
+      const lastSignup = Number(user.lastSignupTime || user[3]);
+      const interval = Number(await contract.renewalInterval());
+
+      if (lastSignup === 0) {
+        setTimeLeft(0);
+        return;
+      }
+
+      const expiry = lastSignup + interval;
+      const now = Math.floor(Date.now() / 1000);
+      const remain = Math.max(0, expiry - now);
+
+      setTimeLeft(remain * 1000);
+      if (remain <= 0) {
+        setIsRegistered(false);
+      }
+    } catch (err) {
+      console.error("Error loading timer:", err);
+      setTimeLeft(0);
+    }
+  };
+
   const checkRegistration = async (userAddress, provider) => {
     const contract = new ethers.Contract(NEW_CONTRACT_ADDRESS, CONTRACT_ABI, provider);
     try {
@@ -41,53 +68,28 @@ function App() {
       const fee = await contract.signupFee();
       setSignupFee(ethers.formatUnits(fee, 18));
 
-      // 🔥 Smart Contract ke live data (lastSignupTime & renewalInterval) se exact remaining time nikalna
-      try {
-        const userInfo = await contract.users(userAddress);
-        const lastSignupTime = Number(userInfo.lastSignupTime || userInfo[3] || 0);
-        const renewalInterval = Number(await contract.renewalInterval() || 2592000); 
-        const renewalEnabled = await contract.renewalEnabled();
-
-        if (renewalEnabled && lastSignupTime > 0) {
-          // Smart contract ke mutabik expiry time (in seconds)
-          const expiryBlockTime = lastSignupTime + renewalInterval;
-          
-          // Latest block ya current device time (seconds)
-          const currentTimestamp = Math.floor(Date.now() / 1000);
-          
-          // Remaining seconds contract ke hisab se
-          const remainingSeconds = expiryBlockTime - currentTimestamp;
-          const remainingMs = remainingSeconds > 0 ? remainingSeconds * 1000 : 0;
-
-          setTimeLeft(remainingMs);
-          if (remainingMs <= 0) {
-            setIsRegistered(false);
-          }
-        } else {
-          setTimeLeft(0);
-        }
-      } catch (err) {
-        console.error("Error fetching expiry from contract:", err);
-        setTimeLeft(0);
-      }
+      // 🔥 Call loadTimer once when wallet connects / checks registration
+      await loadTimer(contract, userAddress);
 
     } catch (e) { console.error(e); }
   };
 
-  // 🔥 Live Countdown Timer Effect & Auto Redirect on Expiry
+  // 🔥 Exact user requested countdown useEffect
   useEffect(() => {
-    if (timeLeft === null || timeLeft <= 0) return;
-    const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1000) {
-          clearInterval(timer);
-          setIsRegistered(false);
-          return 0;
-        }
-        return prev - 1000;
-      });
+    if (timeLeft == null || timeLeft <= 0) return;
+
+    const id = setInterval(() => {
+        setTimeLeft(prev => {
+            if (prev <= 1000) {
+                clearInterval(id);
+                setIsRegistered(false);
+                return 0;
+            }
+            return prev - 1000;
+        });
     }, 1000);
-    return () => clearInterval(timer);
+
+    return () => clearInterval(id);
   }, [timeLeft]);
 
   const formatTime = (ms) => {
@@ -116,7 +118,9 @@ function App() {
       await regTx.wait();
       
       setIsRegistered(true);
-      fetchHistory(await signer.getAddress(), provider);
+      const address = await signer.getAddress();
+      fetchHistory(address, provider);
+      await loadTimer(coreContract, address); // Refresh timer after successful signup
       alert("Registration Successful!");
       setShowPopup(true);
       setTimeout(() => setShowPopup(false), 8000);
