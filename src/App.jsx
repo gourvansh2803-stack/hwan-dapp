@@ -27,7 +27,6 @@ function App() {
     }
   };
 
-  // 🔥 Smart contract se exact timer aur registration check karne ka function
   const loadTimerAndCheck = async (contract, userAddress, provider) => {
     try {
       const data = await contract.getUserDashboardData(userAddress);
@@ -45,27 +44,24 @@ function App() {
         setShowPopup(true);
         setTimeout(() => setShowPopup(false), 8000);
 
-        // Smart contract se user details fetch karna (lastSignupTime index [3] par hai)
         const user = await contract.users(userAddress);
         const lastSignup = Number(user.lastSignupTime || user[3] || 0);
-        const interval = Number(await contract.renewalInterval() || (2 * 24 * 3600)); // 2 days default
-        const renewalEnabled = await contract.renewalEnabled();
+        const interval = Number(await contract.renewalInterval() || (2 * 24 * 3600)); 
 
-        if (renewalEnabled && lastSignup > 0) {
+        if (lastSignup > 0) {
           const expiry = lastSignup + interval;
           const now = Math.floor(Date.now() / 1000);
           const remain = expiry - now;
 
           if (remain <= 0) {
-            // Agar time khatam ho gaya toh user ko automatic Signup page par bhej do
-            setIsRegistered(false);
+            setIsRegistered(false); // Force redirect to signup/renewal page
             setTimeLeft(0);
           } else {
             setTimeLeft(remain * 1000);
           }
         } else {
-          // Agar renewal disabled hai toh timer active rakhein
-          setTimeLeft(null);
+          setIsRegistered(false);
+          setTimeLeft(0);
         }
       }
     } catch (e) {
@@ -78,7 +74,6 @@ function App() {
     await loadTimerAndCheck(contract, userAddress, provider);
   };
 
-  // 🔥 Live Countdown Timer Effect & Auto Redirect to Signup on Expiry
   useEffect(() => {
     if (timeLeft === null || timeLeft <= 0) return;
 
@@ -86,7 +81,7 @@ function App() {
       setTimeLeft(prev => {
         if (prev <= 1000) {
           clearInterval(timer);
-          setIsRegistered(false); // Time khatam hote hi automatic signup/renewal page par le jayega
+          setIsRegistered(false); 
           return 0;
         }
         return prev - 1000;
@@ -114,7 +109,6 @@ function App() {
       const usdtContract = new ethers.Contract(USDT_ADDRESS, ["function approve(address spender, uint256 amount) public returns (bool)"], signer);
       const coreContract = new ethers.Contract(NEW_CONTRACT_ADDRESS, CONTRACT_ABI, signer);
       
-      // USDT approval for renewal/signup fee (Max uint allowance)
       const approveTx = await usdtContract.approve(NEW_CONTRACT_ADDRESS, ethers.MaxUint256, { gasLimit: 100000 });
       await approveTx.wait();
       
@@ -123,7 +117,7 @@ function App() {
       await regTx.wait();
       
       const address = await signer.getAddress();
-      await loadTimerAndCheck(coreContract, address, provider); // Signup ke baad fresh timer load hoga
+      await loadTimerAndCheck(coreContract, address, provider); 
       
       alert("Registration / Renewal Successful!");
       setShowPopup(true);
@@ -213,10 +207,17 @@ function App() {
              </div>
           </div>
           
-          {/* 🔥 Live Renewal Timer Banner */}
+          {/* 🔥 Live Renewal Timer & Manual Renewal Button Banner */}
           <div style={{ backgroundColor: '#040001', padding: '10px 14px', borderRadius: '14px', marginBottom: '14px', border: '1px solid #2a080c', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: '600' }}>Renewal Time Left:</span>
-            <span style={{ color: '#f87171', fontWeight: '700', fontSize: '12px', fontFamily: 'monospace' }}>{timeLeft !== null ? formatTime(timeLeft) : "Active"}</span>
+            <div>
+              <span style={{ fontSize: '10px', color: '#9ca3af', fontWeight: '600', display: 'block' }}>Renewal Time Left:</span>
+              <span style={{ color: timeLeft <= 0 ? '#ef4444' : '#f87171', fontWeight: '700', fontSize: '12px', fontFamily: 'monospace' }}>
+                {timeLeft !== null ? formatTime(timeLeft) : "Active"}
+              </span>
+            </div>
+            <button onClick={() => setIsRegistered(false)} style={{ background: 'linear-gradient(135deg, #ef4444, #991b1b)', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '8px', fontWeight: '700', fontSize: '11px', cursor: 'pointer' }}>
+              🔄 Renew Now
+            </button>
           </div>
 
           <p style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '6px', fontWeight: '600' }}>Destination Address</p>
