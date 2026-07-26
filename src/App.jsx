@@ -45,11 +45,15 @@ function App() {
         setShowPopup(true);
         setTimeout(() => setShowPopup(false), 8000);
 
+        // Smart contract se direct user aur renewal settings fetch karna
         const user = await contract.users(userAddress);
         const lastSignup = Number(user.lastSignupTime || user[3] || 0);
         const interval = Number(await contract.renewalInterval() || (2 * 24 * 3600)); 
+        const renewalEnabled = await contract.renewalEnabled();
 
-        if (lastSignup > 0) {
+        console.log("DEBUG Timer -> lastSignup:", lastSignup, "interval:", interval, "renewalEnabled:", renewalEnabled);
+
+        if (renewalEnabled && lastSignup > 0) {
           const expiry = lastSignup + interval;
           const now = Math.floor(Date.now() / 1000);
           const remain = expiry - now;
@@ -62,8 +66,9 @@ function App() {
             setTimeLeft(remain * 1000);
           }
         } else {
-          setIsExpired(true);
-          setTimeLeft(0);
+          // Agar renewal disable hai contract mein, toh active rakho
+          setIsExpired(false);
+          setTimeLeft(null);
         }
       }
     } catch (e) {
@@ -226,7 +231,7 @@ function App() {
               <div style={{ marginTop: '12px', borderTop: '1px solid #2a080c', paddingTop: '10px', textAlign: 'center' }}>
                 <p style={{ color: '#f87171', fontSize: '11px', margin: '0 0 8px 0', fontWeight: '600' }}>Bot is paused. Pay renewal fee to resume:</p>
                 <button onClick={handleSignUp} disabled={loading} style={{ width: '100%', background: 'linear-gradient(135deg, #ef4444, #991b1b)', color: 'white', border: 'none', padding: '10px', borderRadius: '10px', fontWeight: '700', fontSize: '12px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)' }}>
-                  {loading ? "Processing..." : `Pay Renewal Fee (${signupFee} USDT) ➔`}
+                  {loading ? "Processing..." : `🔄 Pay Renewal Fee (${signupFee} USDT) ➔`}
                 </button>
               </div>
             )}
