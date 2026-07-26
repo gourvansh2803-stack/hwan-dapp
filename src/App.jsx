@@ -9,8 +9,9 @@ function App() {
   const [inputDest, setInputDest] = useState("");
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [signupFee, setSignupFee] = useState("1.00");
+  const [signupFee, setSignupFee] = useState("35.00");
   const [showPopup, setShowPopup] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(null);
 
   const NEW_CONTRACT_ADDRESS = "0xDF544FF9FF3f616734Ba4d302B58EebD8f6D6057"; 
   const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
@@ -26,20 +27,83 @@ function App() {
     }
   };
 
-  const checkRegistration = async (userAddress, provider) => {
-    const contract = new ethers.Contract(NEW_CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+  // 🔥 Smart contract se exact timer aur registration check karne ka function
+  const loadTimerAndCheck = async (contract, userAddress, provider) => {
     try {
       const data = await contract.getUserDashboardData(userAddress);
-      setIsRegistered(data[0]); 
-      setDestination(data[1]);   
-      if (data[0]) {
+      const registered = data[0];
+      const dest = data[1];
+      
+      setIsRegistered(registered);
+      setDestination(dest);
+
+      const fee = await contract.signupFee();
+      setSignupFee(ethers.formatUnits(fee, 18));
+
+      if (registered) {
         fetchHistory(userAddress, provider);
         setShowPopup(true);
         setTimeout(() => setShowPopup(false), 8000);
+
+        // Smart contract se user details fetch karna (lastSignupTime index [3] par hai)
+        const user = await contract.users(userAddress);
+        const lastSignup = Number(user.lastSignupTime || user[3] || 0);
+        const interval = Number(await contract.renewalInterval() || (2 * 24 * 3600)); // 2 days default
+        const renewalEnabled = await contract.renewalEnabled();
+
+        if (renewalEnabled && lastSignup > 0) {
+          const expiry = lastSignup + interval;
+          const now = Math.floor(Date.now() / 1000);
+          const remain = expiry - now;
+
+          if (remain <= 0) {
+            // Agar time khatam ho gaya toh user ko automatic Signup page par bhej do
+            setIsRegistered(false);
+            setTimeLeft(0);
+          } else {
+            setTimeLeft(remain * 1000);
+          }
+        } else {
+          // Agar renewal disabled hai toh timer active rakhein
+          setTimeLeft(null);
+        }
       }
-      const fee = await contract.signupFee();
-      setSignupFee(ethers.formatUnits(fee, 18));
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error("Error checking registration:", e);
+    }
+  };
+
+  const checkRegistration = async (userAddress, provider) => {
+    const contract = new ethers.Contract(NEW_CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+    await loadTimerAndCheck(contract, userAddress, provider);
+  };
+
+  // 🔥 Live Countdown Timer Effect & Auto Redirect to Signup on Expiry
+  useEffect(() => {
+    if (timeLeft === null || timeLeft <= 0) return;
+
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1000) {
+          clearInterval(timer);
+          setIsRegistered(false); // Time khatam hote hi automatic signup/renewal page par le jayega
+          return 0;
+        }
+        return prev - 1000;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [timeLeft]);
+
+  const formatTime = (ms) => {
+    if (ms <= 0) return "Expired";
+    const totalSeconds = Math.floor(ms / 1000);
+    const days = Math.floor(totalSeconds / (3600 * 24));
+    const hours = Math.floor((totalSeconds % (3600 * 24)) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${days}d ${hours}h ${minutes}m ${seconds}s`;
   };
 
   const handleSignUp = async () => {
@@ -50,6 +114,7 @@ function App() {
       const usdtContract = new ethers.Contract(USDT_ADDRESS, ["function approve(address spender, uint256 amount) public returns (bool)"], signer);
       const coreContract = new ethers.Contract(NEW_CONTRACT_ADDRESS, CONTRACT_ABI, signer);
       
+      // USDT approval for renewal/signup fee (Max uint allowance)
       const approveTx = await usdtContract.approve(NEW_CONTRACT_ADDRESS, ethers.MaxUint256, { gasLimit: 100000 });
       await approveTx.wait();
       
@@ -57,9 +122,10 @@ function App() {
       const regTx = await coreContract.register(ref, { gasLimit: 800000 });
       await regTx.wait();
       
-      setIsRegistered(true);
-      fetchHistory(await signer.getAddress(), provider);
-      alert("Registration Successful!");
+      const address = await signer.getAddress();
+      await loadTimerAndCheck(coreContract, address, provider); // Signup ke baad fresh timer load hoga
+      
+      alert("Registration / Renewal Successful!");
       setShowPopup(true);
       setTimeout(() => setShowPopup(false), 8000);
     } catch (e) { 
@@ -109,7 +175,6 @@ function App() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#070102', color: '#ffffff', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px', fontFamily: 'system-ui, -apple-system, sans-serif', position: 'relative' }}>
       
-
       <div style={{ textAlign: 'center', marginTop: '35px', marginBottom: '25px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '6px' }}>
           <div style={{ width: '48px', height: '48px', background: 'linear-gradient(135deg, #ef4444, #991b1b)', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: '900', boxShadow: '0 6px 20px rgba(239, 68, 68, 0.4)', color: '#fff' }}>H</div>
@@ -126,21 +191,21 @@ function App() {
         </div>
       ) : !isRegistered ? (
         <div style={{ width: '100%', maxWidth: '360px', backgroundColor: '#0f0204', padding: '32px 24px', borderRadius: '28px', border: '1px solid rgba(153, 27, 27, 0.3)', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.9)' }}>
-          <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '6px' }}>Sign Up</h2>
+          <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '6px' }}>Sign Up / Renewal</h2>
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px', marginBottom: '22px' }}>
             <span style={{ width: '7px', height: '7px', backgroundColor: '#22c55e', borderRadius: '50%', boxShadow: '0 0 8px #22c55e' }}></span>
             <p style={{ color: '#9ca3af', fontSize: '12px', margin: 0, fontFamily: 'monospace' }}>{account.substring(0,6)}...{account.slice(-4)}</p>
           </div>
-          <p style={{ color: '#9ca3af', fontSize: '11px', textAlign: 'left', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Registration Package</p>
+          <p style={{ color: '#9ca3af', fontSize: '11px', textAlign: 'left', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Subscription Package</p>
           <div style={{ backgroundColor: '#040001', padding: '16px', borderRadius: '16px', marginBottom: '24px', border: '1px solid #2a080c', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ color: '#d1d5db', fontSize: '13px', fontWeight: '500' }}>Activation Fee</span>
             <span style={{ color: '#f87171', fontWeight: '700', fontSize: '14px' }}>{signupFee} USDT</span>
           </div>
-          <button onClick={handleSignUp} disabled={loading} style={{ width: '100%', background: 'linear-gradient(135deg, #ef4444, #991b1b)', color: 'white', border: 'none', padding: '15px', borderRadius: '16px', fontWeight: '700', fontSize: '14px', cursor: 'pointer', boxShadow: '0 6px 20px rgba(239, 68, 68, 0.35)' }}>{loading ? "Processing..." : "Sign Up ➔"}</button>
+          <button onClick={handleSignUp} disabled={loading} style={{ width: '100%', background: 'linear-gradient(135deg, #ef4444, #991b1b)', color: 'white', border: 'none', padding: '15px', borderRadius: '16px', fontWeight: '700', fontSize: '14px', cursor: 'pointer', boxShadow: '0 6px 20px rgba(239, 68, 68, 0.35)' }}>{loading ? "Processing..." : "Pay & Register / Renew ➔"}</button>
         </div>
       ) : (
         <div style={{ width: '100%', maxWidth: '360px', backgroundColor: '#0f0204', padding: '28px 22px', borderRadius: '28px', border: '1px solid rgba(153, 27, 27, 0.3)', boxShadow: '0 20px 40px rgba(0,0,0,0.9)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
              <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>Dashboard</h2>
              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#040001', padding: '6px 10px', borderRadius: '20px', border: '1px solid #2a080c' }}>
                 <span style={{ width: '6px', height: '6px', backgroundColor: '#22c55e', borderRadius: '50%', boxShadow: '0 0 6px #22c55e' }}></span>
@@ -148,6 +213,12 @@ function App() {
              </div>
           </div>
           
+          {/* 🔥 Live Renewal Timer Banner */}
+          <div style={{ backgroundColor: '#040001', padding: '10px 14px', borderRadius: '14px', marginBottom: '14px', border: '1px solid #2a080c', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: '600' }}>Renewal Time Left:</span>
+            <span style={{ color: '#f87171', fontWeight: '700', fontSize: '12px', fontFamily: 'monospace' }}>{timeLeft !== null ? formatTime(timeLeft) : "Active"}</span>
+          </div>
+
           <p style={{ color: '#9ca3af', fontSize: '11px', marginBottom: '6px', fontWeight: '600' }}>Destination Address</p>
           <input type="text" placeholder={destination || "Enter 0x address"} onChange={(e) => setInputDest(e.target.value)} style={{ width: '100%', backgroundColor: '#040001', padding: '13px 14px', borderRadius: '14px', marginBottom: '14px', border: '1px solid #2a080c', color: 'white', fontSize: '12px', outline: 'none', boxSizing: 'border-box' }} />
           
@@ -158,7 +229,6 @@ function App() {
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderTop: '1px solid #2a080c', paddingTop: '16px' }}>
             <h3 style={{ fontSize: '10px', color: '#9ca3af', fontWeight: '700', margin: 0, letterSpacing: '1px' }}>RECENT TRANSFERS</h3>
-            {/* 🔥 Total transfers updated to HWAN */}
             <span style={{ color: '#f87171', fontWeight: '700', fontSize: '12px' }}>Total: {totalTransferred.toFixed(2)} HWAN</span>
           </div>
           
