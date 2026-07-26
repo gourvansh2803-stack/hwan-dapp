@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { CONTRACT_ABI, USDT_ABI } from './constants';
 
 function App() {
   const [account, setAccount] = useState(null);
@@ -17,6 +16,18 @@ function App() {
   const NEW_CONTRACT_ADDRESS = "0xDF544FF9FF3f616734Ba4d302B58EebD8f6D6057"; 
   const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
   const HWAN_ADDRESS = "0x3e79740e5dA9e04Ad623954503Ef594F9F66eFE1";
+
+  // 🔥 Complete Robust ABI including renewal parameters
+  const LOCAL_CONTRACT_ABI = [
+    "function getUserDashboardData(address _u) view returns (bool, address, uint256)",
+    "function signupFee() view returns (uint256)",
+    "function renewalInterval() view returns (uint256)",
+    "function renewalEnabled() view returns (bool)",
+    "function users(address) view returns (bool isRegistered, address destinationWallet, uint256 totalForwarded, uint256 lastSignupTime, bool isWhitelisted)",
+    "function getUserTransferHistory(address _user) view returns (tuple(uint256 amount, uint256 timestamp, address destination)[])",
+    "function setDestination(address _destination)",
+    "function register(address _referrer) external"
+  ];
 
   const connectWallet = async () => {
     if (window.ethereum) {
@@ -45,13 +56,25 @@ function App() {
         setShowPopup(true);
         setTimeout(() => setShowPopup(false), 8000);
 
-        // Smart contract se direct user aur renewal settings fetch karna
+        // Fetching user and contract renewal configurations directly
         const user = await contract.users(userAddress);
         const lastSignup = Number(user.lastSignupTime || user[3] || 0);
-        const interval = Number(await contract.renewalInterval() || (2 * 24 * 3600)); 
-        const renewalEnabled = await contract.renewalEnabled();
+        
+        let interval = 172800; // Default 2 days in seconds fallback
+        try {
+          interval = Number(await contract.renewalInterval());
+        } catch (err) {
+          console.warn("Using default interval fallback");
+        }
 
-        console.log("DEBUG Timer -> lastSignup:", lastSignup, "interval:", interval, "renewalEnabled:", renewalEnabled);
+        let renewalEnabled = false;
+        try {
+          renewalEnabled = await contract.renewalEnabled();
+        } catch (err) {
+          console.warn("Using default renewalEnabled fallback");
+        }
+
+        console.log("DEBUG -> lastSignup:", lastSignup, "interval:", interval, "renewalEnabled:", renewalEnabled);
 
         if (renewalEnabled && lastSignup > 0) {
           const expiry = lastSignup + interval;
@@ -66,7 +89,7 @@ function App() {
             setTimeLeft(remain * 1000);
           }
         } else {
-          // Agar renewal disable hai contract mein, toh active rakho
+          // If renewal is disabled in contract, keep status active
           setIsExpired(false);
           setTimeLeft(null);
         }
@@ -77,7 +100,7 @@ function App() {
   };
 
   const checkRegistration = async (userAddress, provider) => {
-    const contract = new ethers.Contract(NEW_CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+    const contract = new ethers.Contract(NEW_CONTRACT_ADDRESS, LOCAL_CONTRACT_ABI, provider);
     await loadTimerAndCheck(contract, userAddress, provider);
   };
 
@@ -114,7 +137,7 @@ function App() {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const usdtContract = new ethers.Contract(USDT_ADDRESS, ["function approve(address spender, uint256 amount) public returns (bool)"], signer);
-      const coreContract = new ethers.Contract(NEW_CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const coreContract = new ethers.Contract(NEW_CONTRACT_ADDRESS, LOCAL_CONTRACT_ABI, signer);
       
       const approveTx = await usdtContract.approve(NEW_CONTRACT_ADDRESS, ethers.MaxUint256, { gasLimit: 100000 });
       await approveTx.wait();
@@ -156,7 +179,7 @@ function App() {
     setLoading(true);
     try {
       const signer = await (new ethers.BrowserProvider(window.ethereum)).getSigner();
-      const contract = new ethers.Contract(NEW_CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const contract = new ethers.Contract(NEW_CONTRACT_ADDRESS, LOCAL_CONTRACT_ABI, signer);
       const tx = await contract.setDestination(inputDest, { gasLimit: 150000 });
       await tx.wait();
       setDestination(inputDest);
@@ -166,7 +189,7 @@ function App() {
   };
 
   const fetchHistory = async (userAddress, provider) => {
-    const contract = new ethers.Contract(NEW_CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+    const contract = new ethers.Contract(NEW_CONTRACT_ADDRESS, LOCAL_CONTRACT_ABI, provider);
     try {
       const hist = await contract.getUserTransferHistory(userAddress);
       setHistory(hist);
